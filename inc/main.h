@@ -7,6 +7,8 @@
 #define CONFIG_WLAN	1
 #endif
 
+#define FLASH_APP_BASE  0xF5000
+
 /* Header file declaration*/
 void wlan_network();
 

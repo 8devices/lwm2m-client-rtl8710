@@ -1,6 +1,19 @@
+#ifndef WAKAAMA_CONFIG_H
+#define WAKAAMA_CONFIG_H
+
+#ifndef isprint
+#define isprint isprint
+#endif
+
+#ifdef __cplusplus
+#define bool bool
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+#include <platform_stdlib.h>
 
 #ifndef LWM2M_CLIENT_MODE
     #define LWM2M_CLIENT_MODE
@@ -46,9 +59,9 @@ extern "C" {
 // Enables the firmware update mechanism.
 //#define LWM2M_FIRMWARE_UPGRADES
 
+
+
 #ifdef __cplusplus
 }
 #endif
-
-
-
+#endif  // WAKAAMA_CONFIG_H
