@@ -57,11 +57,13 @@
 struct timeval tv;
 int led_ctrl;
 gpio_t gpio_led;
-gpio_t gpio_test;
+gpio_t gpio_tx;
+gpio_t gpio_pa5;
 pwmout_t gpio_pwm;
 serial_t sobj;
 gtimer_t timer;
 analogin_t adcin;
+gtimer_t callback_timer;
 lwm2m_client_context_t client_context;
 
 extern int lwip_init_done;
@@ -229,6 +231,8 @@ void ap_cb(struct httpd_conn *conn)
 		{
 			sprintf(response, get_reply, network_info.sta_ssid, network_info.wak_server, network_info.wak_client_name);
 			httpd_response_write_header_start(conn, "200 OK", "text/plain", strlen(response));
+			printf("\r\nresponse - %s", response);
+			printf("\r\nget_reply - %s", get_reply);
 		}
 		httpd_response_write_header(conn, "Connection", "close");
 		httpd_response_write_header_finish(conn);
@@ -289,7 +293,7 @@ void AP_thread(void)
 	char *ssid = "RTL_AP";
 	rtw_security_t security_type = RTW_SECURITY_WPA2_AES_PSK;
 	char *password = "12345678";
-	int channel = 6;
+	int channel = 11;
 	wifi_start_ap(ssid, security_type, password, strlen(ssid), strlen(password), channel);
 	dhcps_init(&xnetif[0]);
 
@@ -382,38 +386,129 @@ void wakaama_thread(void)
 	}
 }
 
+void printBits(void const * const ptr)
+{
+	unsigned char *b = (unsigned char*)ptr;
+	unsigned char byte;
+	int i, j;
+	for(i = 3; i >= 0; i--)
+	{
+		for(j = 7; j >= 0; j--)
+		{
+			byte = (b[i] >> j) & 1;
+			printf("%u", byte);
+		}
+	}
+}
+
+uint32_t reg;
+uint32_t reg1, reg2, reg3, reg4, reg5, reg6, reg7, reg8;
+
+#define PRINT()	do{															\
+					printf("[%s:%d] GPIO_A_REG = ", __func__, __LINE__); 	\
+					reg = HAL_READ32(GPIO_REG_BASE, 0x50); 					\
+					printBits(&reg); 										\
+					printf("\r\n");											\
+					}while(0);
+
+#define PRINTDR()	do{															\
+					printf("[%s:%d] GPIO_DR_REG = ", __func__, __LINE__); 	\
+					reg = HAL_READ32(GPIO_REG_BASE, 0x00); 					\
+					printBits(&reg); 										\
+					printf("\r\n");											\
+					}while(0);
+
+#define PRINTDDR()	do{															\
+					printf("[%s:%d] GPIO_DDR_REG = ", __func__, __LINE__); 	\
+					reg = HAL_READ32(GPIO_REG_BASE, 0x04); 					\
+					printBits(&reg); 										\
+					printf("\r\n");											\
+					}while(0);
+
+#define PRINTCTRL()	do{															\
+					printf("[%s:%d] GPIO_CTRL_REG = ", __func__, __LINE__); 	\
+					reg = HAL_READ32(GPIO_REG_BASE, 0x08); 					\
+					printBits(&reg); 										\
+					printf("\r\n");											\
+					}while(0);
+
+int tick = 0;
+void print_thread1(void)
+{
+	tick++;
+	printf("%s tick = %d\r\n", __func__, tick);
+	vTaskDelay(pdMS_TO_TICKS(200));
+}
+void print_thread2(void)
+{
+	tick++;
+	printf("%s tick = %d\r\n", __func__, tick);
+	vTaskDelay(pdMS_TO_TICKS(10));
+}
+
+void timer2_callback(void)
+{
+	Pinmux_Config(PA_30, PINMUX_FUNCTION_GPIO);
+	reg = HAL_READ32(GPIO_REG_BASE, 0x50);
+	Pinmux_Config(PA_30, PINMUX_FUNCTION_UART);
+}
+
 int main(void)
 {
-//	PMAP_Init();
-	gpio_init(&gpio_test, UART_LOG_TX);
-	gpio_dir(&gpio_test, PIN_INPUT);
-	gpio_mode(&gpio_test, PullUp);
+	gtimer_init(&callback_timer, 2);
+	gtimer_start_periodical(&callback_timer, 50000, (void*)timer2_callback, 2);
 
-//	if(!gpio_read(&gpio_test))
+	xTaskCreate((TaskFunction_t)print_thread, ((const char*)"print_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
+
+	vTaskStartScheduler();
+//	gpio_init(&gpio_pa5, GPIO_LED_PIN);
+//	gpio_dir(&gpio_pa5, PIN_INPUT);
+//	gpio_mode(&gpio_pa5, PullUp);
+////	PMAP_Init();
+//	gpio_init(&gpio_tx, UART_LOG_TX);
+//	gpio_dir(&gpio_tx, PIN_INPUT);
+//	gpio_mode(&gpio_tx, PullUp);
+//
+//	PRINT();
+//	gpio_init(&gpio_led, PA_12);
+//	PRINT();
+//	gpio_dir(&gpio_led, PIN_OUTPUT);
+//	PRINT();
+//	gpio_mode(&gpio_led, PullNone);
+//	PRINT();
+//
+//	int result1 = gpio_read(&gpio_tx);
+//	int result2 = gpio_read(&gpio_pa5);
+//	int status;
+
+//	if(!result1 || !result2)
 //	{
-		xTaskCreate((TaskFunction_t)AP_thread, ((const char*)"AP_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
+//		xTaskCreate((TaskFunction_t)AP_thread, ((const char*)"AP_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
 //	}
 //	else
 //	{
 //		xTaskCreate((TaskFunction_t)STA_thread, ((const char*)"STA_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
 //	}
 
-	gpio_deinit(&gpio_test);
-	sys_log_uart_on();
+//	if(!result1 || !result2)
+//	{
+//		status = 1;
+//	}
+//	else
+//	{
+//		status = 2;
+//	}
+//
+//	gpio_deinit(&gpio_tx);
+//	sys_log_uart_on();
 
 //	Pinmux_Config((uint8_t)(pmap_func[].PinName), pmap_func[].Function);
 //	Pinmux_Config((uint8_t)(pmap_func[37].PinName), pmap_func[37].Function);
 //	Pinmux_Config((uint8_t)(pmap_func[38].PinName), pmap_func[38].Function);
-
-//	gpio_init(&gpio_led, GPIO_LED_PIN);
-//	gpio_dir(&gpio_led, PIN_OUTPUT);
-//	gpio_mode(&gpio_led, PullNone);
 //
 //	serial_init(&sobj,UART_TX,UART_RX);
 //	serial_baud(&sobj,115200);
 //	serial_format(&sobj, 8, ParityNone, 1);
-
-	vTaskStartScheduler();
 
 	while(1)
 	{
