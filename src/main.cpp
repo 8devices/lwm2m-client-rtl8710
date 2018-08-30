@@ -31,16 +31,20 @@
 //#include "netconf.h"
 #include "lwip_netconf.h"
 //	SDK
+extern "C" {
+#include "httpd/httpd.h"
+#include "dhcp/dhcps.h"
+#include "rtl8710b_pinmux.h"
+#include "rtl8710b_delay.h"
+}
 #include "device.h"
 #include "serial_api.h"
 #include "wifi_conf.h"
-#include "dhcp/dhcps.h"
 #include "gpio_api.h"
 #include "pwmout_api.h"
 #include "timer_api.h"
 #include "analogin_api.h"
 #include "sys_api.h"
-#include "httpd/httpd.h"
 #include "cJSON.h"
 #include "flash_api.h"
 //	RTOS
