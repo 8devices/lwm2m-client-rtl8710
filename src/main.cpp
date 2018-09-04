@@ -16,16 +16,16 @@
 #include "lwm2m/c_connect.h"
 #include "lwm2m/debug.h"
 //	WAKAAMA OBJECTS
-#include "lwm2mObjects/3312.h"
-#include "lwm2mObjects/3306.h"
-#include "lwm2mObjects/3202.h"
+#include "lwm2mObjects/3312.h" //relay
+#include "lwm2mObjects/3306.h" //pwm
+#include "lwm2mObjects/3202.h" //adc
+#include "lwm2mObjects/3341.h" //spi
 //	USER
 #include "main.h"
 //	GCC
 #include "stdarg.h"
 #include "stdio.h"
 #include "sys/time.h"
-#include "stdarg.h"
 //#include "stdlib.h"
 //	LWIP
 //#include "netconf.h"
@@ -36,7 +36,6 @@ extern "C" {
 #include "dhcp/dhcps.h"
 #include "rtl8710b_pinmux.h"
 #include "rtl8710b_delay.h"
-}
 #include "device.h"
 #include "serial_api.h"
 #include "wifi_conf.h"
@@ -47,16 +46,21 @@ extern "C" {
 #include "sys_api.h"
 #include "cJSON.h"
 #include "flash_api.h"
+#include "spi_api.h"
+}
+
 //	RTOS
 //#include "FreeRTOSConfig.h"
 //#include "task.h"
 //	TEST_OBJECTS
 //#include "test_objects/pwm.h"
 
-#define UART_LOG_TX PA_30
-#define UART_TX    PA_23
-#define UART_RX    PA_18
-#define GPIO_LED_PIN        PA_5
+#define SPI1_MOSI  PA_23
+#define SPI1_MISO  PA_22
+#define SPI1_SCLK  PA_18
+#define SPI1_CS    PA_19
+#define SPI_MASTER 1
+//#define SPI_SLAVE 1
 
 struct timeval tv;
 gtimer_t timer;
@@ -102,11 +106,63 @@ void wakaama_thread(void);
 extern "C" {
 void pwmout_start(pwmout_t* obj);
 void pwmout_stop(pwmout_t* obj);
-void gpio_deinit(gpio_t *obj);
 }
 int set_config_eeprom(void);
 int get_config_eeprom(void);
 uint32_t gen_crc(const network_info_t *buff);
+
+#if SPI_MASTER
+spi_t spi_master;
+void spi_init(id3341::object* obj, id3341::instance* inst)
+{
+	spi_master.spi_idx = MBED_SPI1;
+	spi_init(&spi_master, SPI1_MOSI, SPI1_MISO, SPI1_SCLK, SPI1_CS);
+	spi_format(&spi_master, 8, 0, 0);
+	spi_frequency(&spi_master, 200000);
+
+    obj->verifyWrite = [](id3341::instance* i, uint16_t res_id)
+	{
+    	if(res_id == id3341::RESID::XCoordinate)
+    	{
+    		int read = spi_master_write(&spi_master, i->XCoordinate);
+    		printf("Data received from slave - %d\r\n", read);
+    	}
+
+    	return true;
+	};
+
+    inst->id = 0;
+    obj->addInstance(CTX(client_context), inst);
+    obj->registerObject(CTX(client_context), false);
+}
+#elif SPI_SLAVE
+spi_t spi_slave;
+
+void spi_slave_thread(id3341::instance* inst)
+{
+	while(1)
+	{
+		int read = spi_slave_read(&spi_slave);
+		printf("Data received from master - %d\r\n", read);
+		inst->XCoordinate = read;
+		vTaskDelay(pdMS_TO_TICKS(10));
+	}
+}
+
+void spi_init(id3341::object* obj, id3341::instance* inst)
+{
+	spi_slave.spi_idx = MBED_SPI0;
+	spi_init(&spi_slave, SPI1_MOSI, SPI1_MISO, SPI1_SCLK, SPI1_CS);
+	spi_format(&spi_slave, 8, 0, 1);
+	spi_flush_rx_fifo(&spi_slave);
+
+    inst->id = 0;
+    obj->addInstance(CTX(client_context), inst);
+    obj->registerObject(CTX(client_context), false);
+
+	xTaskCreate((TaskFunction_t)spi_slave_thread, "spi_slave_thread", 1024, inst, tskIDLE_PRIORITY + 1, NULL);
+}
+#endif
 
 void pwm_done_cb(void)
 {
@@ -341,6 +397,10 @@ void STA_thread(void)
 	{
 		wakaama_started = xTaskCreate((TaskFunction_t)wakaama_thread, ((const char*)"wakaama_thread"), 2 * 1024, NULL, tskIDLE_PRIORITY + 2, &wakaama_task_handle);
 	}
+	else
+	{
+		printf("Wakaama thread creation/resume error\r\n");
+	}
 	vTaskDelete(NULL);
 }
 
@@ -352,6 +412,8 @@ void wakaama_thread(void)
 	id3306::instance pwminst{};
 	id3202::object adc{};
 	id3202::instance adcinst{};
+	id3341::object spi{};
+	id3341::instance spiinst{};
 
     lwm2m_client_init(&client_context, network_info.wak_client_name);
     lwm2m_add_server(CTX(client_context), 123, network_info.wak_server, 30, false);
@@ -386,6 +448,7 @@ void wakaama_thread(void)
 
 	pwm_init(&pwm, &pwminst);
 	adc_init(&adc, &adcinst);
+	spi_init(&spi, &spiinst);
 
     tv.tv_sec = 60;
     tv.tv_usec = 0;
@@ -399,53 +462,6 @@ void wakaama_thread(void)
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
-
-//void bitArray(uint32_t val, volatile unsigned char *array)
-//{
-//	for(int i = 31; i >= 0; i--)
-//	{
-//		*(array + i) = (unsigned char)((val >> i) & 1);
-//	}
-//}
-//
-//void printBits(uint32_t val)
-//{
-//	unsigned char bit;
-//	for(int i = 31; i >= 0; i--)
-//	{
-//		bit = (unsigned char)((val >> i) & 1);
-//		printf("%u", bit);
-//	}
-//}
-
-//void print_thread1(void)
-//{
-//	while(1)
-//	{
-////		tick++;
-////		printf("%s tick = %d\r\n", __func__, tick);
-////		printf("%s reg = %u\r\n", __func__, reg);
-//		rtw_mutex_get(&mux);
-//		printf("\r\n%s: reg = ", __func__);
-//		printBits(reg);
-//		rtw_mutex_put(&mux);
-//		vTaskDelay(pdMS_TO_TICKS(200));
-//	}
-//}
-//void print_thread2(void)
-//{
-//	while(1)
-//	{
-////		tick++;
-////		printf("%s tick = %d\r\n", __func__, tick);
-////		printf("%s reg = %u\r\n", __func__, reg);
-//		rtw_mutex_get(&mux);
-//		printf("\r\n%s: reg = ", __func__);
-//		printBits(reg);
-//		rtw_mutex_put(&mux);
-//		vTaskDelay(pdMS_TO_TICKS(10));
-//	}
-//}
 
 void led_blink_thread(void)
 {
