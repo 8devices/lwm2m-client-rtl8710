@@ -1,13 +1,4 @@
 
-//#include "diag.h"
-//#include <stdint.h>
-//#include <string.h>
-//#include <stdarg.h>
-//#include <platform/platform_stdlib.h>
-//#include "netif.h"
-//#include "lwip_netconf.h"
-//#include <lwip/sockets.h>
-
 //	WAKAAMA
 //#include "liblwm2m.h"
 #include "internal_objects.h"
@@ -19,7 +10,7 @@
 #include "lwm2mObjects/3312.h" //relay
 #include "lwm2mObjects/3306.h" //pwm
 #include "lwm2mObjects/3202.h" //adc
-#include "lwm2mObjects/3341.h" //spi
+#include "12345.h"			   //custom
 //	USER
 #include "main.h"
 //	GCC
@@ -47,6 +38,8 @@ extern "C" {
 #include "cJSON.h"
 #include "flash_api.h"
 #include "spi_api.h"
+#include "spi_ex_api.h"
+#include "i2c_api.h"
 }
 
 //	RTOS
@@ -55,12 +48,21 @@ extern "C" {
 //	TEST_OBJECTS
 //#include "test_objects/pwm.h"
 
-#define SPI1_MOSI  PA_23
-#define SPI1_MISO  PA_22
-#define SPI1_SCLK  PA_18
-#define SPI1_CS    PA_19
-#define SPI_MASTER 1
-//#define SPI_SLAVE 1
+#define SPI1_MOSI		PA_23
+#define SPI1_MISO		PA_22
+#define SPI1_SCLK		PA_18
+#define SPI1_CS			PA_19
+#define I2C_SDA			PA_19
+#define I2C_SCL			PA_22
+#define I2C_SLAVE_ADDR0	0x1C
+#define I2C_BUS_CLK		100000
+#define SPI_BUS_CLK		200000
+#define SPI_MODE		0
+#define GPIO_LED		PA_12
+#define ADC_PIN			PA_19
+//#define SPI_MASTER_OBJ	1
+//#define I2C_MASTER_OBJ	1
+#define ADC_OBJ			1
 
 struct timeval tv;
 gtimer_t timer;
@@ -69,6 +71,7 @@ pwmout_t gpio_pwm;
 analogin_t adcin;
 lwm2m_client_context_t client_context;
 xTaskHandle wakaama_task_handle = NULL;
+xTaskHandle slave_handle = NULL;
 BaseType_t wakaama_started = 0;
 
 extern int lwip_init_done;
@@ -96,9 +99,6 @@ enum json_reply
 const char get_reply[] = "Current config:\r\n	connect to AP: SSID - %s\r\n	lwm2m server address - %s\r\n	lwm2m client name - %s\r\n";
 
 using namespace KnownObjects;
-//lwm2m_client_context_t client_context;
-//id3312::object relay;
-//id3312::instance relayinst;
 
 void AP_thread(void);
 void STA_thread(void);
@@ -111,23 +111,47 @@ int set_config_eeprom(void);
 int get_config_eeprom(void);
 uint32_t gen_crc(const network_info_t *buff);
 
-#if SPI_MASTER
-spi_t spi_master;
-void spi_init(id3341::object* obj, id3341::instance* inst)
+#if I2C_MASTER_OBJ
+i2c_t i2cmaster;
+void transaction_execute(Lwm2mObjectInstance* instance, lwm2m_context_t* context)
 {
-	spi_master.spi_idx = MBED_SPI1;
-	spi_init(&spi_master, SPI1_MOSI, SPI1_MISO, SPI1_SCLK, SPI1_CS);
-	spi_format(&spi_master, 8, 0, 0);
-	spi_frequency(&spi_master, 200000);
+	id12345::instance* objinst = instance->as<id12345::instance>();
 
-    obj->verifyWrite = [](id3341::instance* i, uint16_t res_id)
+	uint8_t *buf = objinst->buffer.data;
+	int write_len = objinst->buffer.used_len;
+	int read_len = objinst->length;
+
+	if (write_len > 0)
 	{
-    	if(res_id == id3341::RESID::XCoordinate)
-    	{
-    		int read = spi_master_write(&spi_master, i->XCoordinate);
-    		printf("Data received from slave - %d\r\n", read);
-    	}
+		write_len = i2c_write(&i2cmaster, objinst->slave_address, (const char*)buf, write_len, read_len > 0 ? 0 : 1);
+	}
 
+	if (read_len > 0)
+	{
+		read_len = i2c_read(&i2cmaster, objinst->slave_address, (char*)buf, read_len, 1);
+	}
+
+	objinst->length = read_len;
+}
+
+void i2c_init(id12345::object* obj, id12345::instance* inst)
+{
+	inst->frequency = I2C_BUS_CLK;
+	inst->slave_address = I2C_SLAVE_ADDR0;
+	inst->transaction = (Executable)transaction_execute;
+	i2c_init(&i2cmaster, I2C_SDA ,I2C_SCL);
+	i2c_frequency(&i2cmaster, inst->frequency);
+	i2c_slave_address(&i2cmaster, 1, inst->slave_address, 0xFF);
+    obj->verifyWrite = [](id12345::instance* i, uint16_t res_id)
+	{
+    	if(res_id == id12345::RESID::frequency)
+    	{
+    		i2c_frequency(&i2cmaster, i->frequency);
+    	}
+    	else if(res_id == id12345::RESID::slave_address)
+    	{
+    		i2c_slave_address(&i2cmaster, 1, i->slave_address, 0xFF);
+    	}
     	return true;
 	};
 
@@ -135,32 +159,60 @@ void spi_init(id3341::object* obj, id3341::instance* inst)
     obj->addInstance(CTX(client_context), inst);
     obj->registerObject(CTX(client_context), false);
 }
-#elif SPI_SLAVE
-spi_t spi_slave;
-
-void spi_slave_thread(id3341::instance* inst)
+#elif SPI_MASTER_OBJ
+spi_t spi_master;
+void transaction_execute(Lwm2mObjectInstance* instance, lwm2m_context_t* context)
 {
-	while(1)
-	{
-		int read = spi_slave_read(&spi_slave);
-		printf("Data received from master - %d\r\n", read);
-		inst->XCoordinate = read;
-		vTaskDelay(pdMS_TO_TICKS(10));
-	}
+	id12345::instance* objinst = instance->as<id12345::instance>();
+	char rx_buffer[100];
+
+	spi_master_write_read_stream(&spi_master, (char*)objinst->buffer.data, rx_buffer, objinst->buffer.used_len);
+	objinst->length = objinst->buffer.used_len;
+	objinst->buffer.copy(rx_buffer, objinst->buffer.used_len);
 }
 
-void spi_init(id3341::object* obj, id3341::instance* inst)
+void spi_init(id12345::object* obj, id12345::instance* inst)
 {
-	spi_slave.spi_idx = MBED_SPI0;
-	spi_init(&spi_slave, SPI1_MOSI, SPI1_MISO, SPI1_SCLK, SPI1_CS);
-	spi_format(&spi_slave, 8, 0, 1);
-	spi_flush_rx_fifo(&spi_slave);
+	inst->frequency = SPI_BUS_CLK;
+	inst->mode = SPI_MODE;
+	inst->transaction = (Executable)transaction_execute;
+	spi_master.spi_idx = MBED_SPI1;
+	spi_init(&spi_master, SPI1_MOSI, SPI1_MISO, SPI1_SCLK, SPI1_CS);
+	spi_format(&spi_master, 8, inst->mode, 0);
+	spi_frequency(&spi_master, inst->frequency);
+
+    obj->verifyWrite = [](id12345::instance* i, uint16_t res_id)
+	{
+    	if(res_id == id12345::RESID::frequency)
+    	{
+    		spi_frequency(&spi_master, i->frequency);
+    	}
+    	else if(res_id == id12345::RESID::mode)
+    	{
+    		spi_format(&spi_master, 8, i->mode, 0);
+    	}
+    	return true;
+	};
 
     inst->id = 0;
     obj->addInstance(CTX(client_context), inst);
     obj->registerObject(CTX(client_context), false);
+}
 
-	xTaskCreate((TaskFunction_t)spi_slave_thread, "spi_slave_thread", 1024, inst, tskIDLE_PRIORITY + 1, NULL);
+#elif ADC_OBJ
+void adc_thread(id3202::instance* inst)
+{
+	inst->AnalogInputCurrentValue = analogin_read(&adcin);
+	vTaskDelay(pdMS_TO_TICKS(100));
+}
+
+void adc_init(id3202::object* obj, id3202::instance* inst)
+{
+	analogin_init(&adcin, ADC_PIN);
+    inst->id = 0;
+    obj->addInstance(CTX(client_context), inst);
+    obj->registerObject(CTX(client_context), false);
+    xTaskCreate((TaskFunction_t)adc_thread, "ADC_THREAD", 1024/4, inst, tskIDLE_PRIORITY + 1, NULL);
 }
 #endif
 
@@ -179,42 +231,48 @@ void pwm_init(id3306::object* obj, id3306::instance* inst)
 
     obj->verifyWrite = [](id3306::instance* i, uint16_t res_id)
     {
-//    	SWITCH CASE PADARYT
-            if(res_id == id3306::RESID::OnOff)
-            {
-            	if(i->OnOff)
-            	{
-            		pwmout_start(&gpio_pwm);
-            	}
-            	else
-            	{
-            		pwmout_stop(&gpio_pwm);
-            	}
-            }
-            else if(res_id == id3306::RESID::Dimmer)
-            {
-            	if(i->Dimmer < 0)
-            		return false;
-            	float percent = ((float)(i->Dimmer)) / 100;
-            	pwmout_write(&gpio_pwm, percent);
-            }
-            else if(res_id == id3306::RESID::OnTime)
-            {
-            	gtimer_start_one_shout(&timer, i->OnTime, (void*)pwm_done_cb, 1);
-            }
-            return true;
+		if(res_id == id3306::RESID::OnOff)
+		{
+			if(i->OnOff)
+			{
+				pwmout_start(&gpio_pwm);
+			}
+			else
+			{
+				pwmout_stop(&gpio_pwm);
+			}
+		}
+		else if(res_id == id3306::RESID::Dimmer)
+		{
+			if(i->Dimmer < 0)
+				return false;
+			float percent = ((float)(i->Dimmer)) / 100;
+			pwmout_write(&gpio_pwm, percent);
+		}
+		else if(res_id == id3306::RESID::OnTime)
+		{
+			gtimer_start_one_shout(&timer, i->OnTime, (void*)pwm_done_cb, 1);
+		}
+		return true;
     };
     inst->id = 0;
     obj->addInstance(CTX(client_context), inst);
     obj->registerObject(CTX(client_context), false);
 }
 
-void adc_init(id3202::object* obj, id3202::instance* inst)
+void relay_init(id3312::object* obj, id3312::instance* inst)
 {
-	analogin_init(&adcin, PA_19);
-    inst->id = 0;
-    obj->addInstance(CTX(client_context), inst);
-    obj->registerObject(CTX(client_context), false);
+	obj->verifyWrite = [](id3312::instance* i, uint16_t res_id)
+	{
+		if(res_id == id3312::RESID::OnOff)
+		{
+			gpio_write(&gpio_led, i->OnOff);
+		}
+		return true;
+	};
+	inst->id = 0;
+	obj->addInstance(CTX(client_context), inst);
+	obj->registerObject(CTX(client_context), false);
 }
 
 uint8_t handle_json(char *json)
@@ -344,7 +402,6 @@ void ap_cb(struct httpd_conn *conn)
 
 void AP_thread(void)
 {
-	vTaskDelay(pdMS_TO_TICKS(2000));
 	if(wakaama_started == 1)
 	{
 		vTaskSuspend(wakaama_task_handle);
@@ -385,10 +442,6 @@ void STA_thread(void)
 	wifi_connect(network_info.sta_ssid, RTW_SECURITY_WPA2_AES_PSK, network_info.sta_pass, strlen(network_info.sta_ssid), strlen(network_info.sta_pass), -1, NULL);
 	LwIP_DHCP(0, DHCP_START);
 
-//	rtw_wifi_setting_t setting;
-//	wifi_get_setting(WLAN0_NAME,&setting);
-//	wifi_show_setting(WLAN0_NAME,&setting);
-
 	if((wakaama_started == 1) && (eTaskGetState(wakaama_task_handle) == eSuspended))
 	{
 		vTaskResume(wakaama_task_handle);
@@ -410,10 +463,6 @@ void wakaama_thread(void)
 	id3312::instance relayinst{};
 	id3306::object pwm{};
 	id3306::instance pwminst{};
-	id3202::object adc{};
-	id3202::instance adcinst{};
-	id3341::object spi{};
-	id3341::instance spiinst{};
 
     lwm2m_client_init(&client_context, network_info.wak_client_name);
     lwm2m_add_server(CTX(client_context), 123, network_info.wak_server, 30, false);
@@ -428,35 +477,27 @@ void wakaama_thread(void)
     client_context.deviceInstance.timezone = "+03:00";
 #endif
 
-//    relay.verifyWrite = [](id3312::instance* i, uint16_t res_id)
-//    {
-//            if(i->id == 0 && res_id == id3312::RESID::OnOff)
-//            {
-//            	printf("/3312/0/5850 state: %d\r\n", i->OnOff);
-//            	gpio_write(&gpio_led, i->OnOff);
-//            	float percentage = ((gpio_pwm.pulse)/(gpio_pwm.period));
-//            	if(i->OnOff)
-//            		pwmout_write(&gpio_pwm, percentage + 0.1);
-//            	else
-//            		pwmout_write(&gpio_pwm, percentage - 0.1);
-//            }
-//            return true;
-//    };
-//    relayinst.id = 0;
-//    relay.addInstance(CTX(client_context), &relayinst);
-//    relay.registerObject(CTX(client_context), false);
-
+    relay_init(&relay, &relayinst);
 	pwm_init(&pwm, &pwminst);
-	adc_init(&adc, &adcinst);
+#if SPI_MASTER_OBJ
+	id12345::object spi{};
+	id12345::instance spiinst{};
 	spi_init(&spi, &spiinst);
+#elif I2C_MASTER_OBJ
+	id12345::object i2c{};
+	id12345::instance i2cinst{};
+	i2c_init(&i2c, &i2cinst);
+#elif ADC_OBJ
+	id3202::object adc{};
+	id3202::instance adcinst{};
+	adc_init(&adc, &adcinst);
+#endif
 
     tv.tv_sec = 60;
     tv.tv_usec = 0;
 
 	while(1)
 	{
-		adcinst.AnalogInputCurrentValue = analogin_read(&adcin);
-		printf("ADC value = %f\r\n", adcinst.AnalogInputCurrentValue);
 		lwm2m_process(CTX(client_context), &tv);
 		lwm2m_watch_and_reconnect(CTX(client_context), &tv, 20);
 		vTaskDelay(pdMS_TO_TICKS(1000));
@@ -501,7 +542,6 @@ void pinmux_thread(void)
 		{
 			total = 0;
 			xTaskCreate((TaskFunction_t)led_blink_thread, ((const char*)"led_blink_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
-//			xTaskCreate((TaskFunction_t)AP_thread, ((const char*)"AP_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
 		}
 		vTaskDelay(pdMS_TO_TICKS(50));
 	}
@@ -509,13 +549,10 @@ void pinmux_thread(void)
 
 int main(void)
 {
-//	rtw_mutex_init(&mux);	SU SITUO DEBUG NEVEIKIA
-
-	gpio_init(&gpio_led, PA_12);
+	gpio_init(&gpio_led, GPIO_LED);
 	gpio_dir(&gpio_led, PIN_OUTPUT);
 	gpio_mode(&gpio_led, PullNone);
 
-//	xTaskCreate((TaskFunction_t)AP_thread, ((const char*)"AP_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
 	xTaskCreate((TaskFunction_t)STA_thread, ((const char*)"STA_thread"), 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
 	xTaskCreate((TaskFunction_t)pinmux_thread, ((const char*)"pinmux_thread"), 1024, NULL, tskIDLE_PRIORITY + 1, NULL);
 	vTaskStartScheduler();
@@ -559,15 +596,3 @@ uint32_t gen_crc(const network_info_t *buff)
 	}
 	return ~crc;
 }
-
-#ifdef LWM2M_WITH_LOGS
-void lwm2m_printf(const char * format, ...)
-{
-	char buffer[256];
-	va_list args;
-	va_start(args, format);
-	vsnprintf(buffer, sizeof(buffer), format, args);
-	printf(buffer);
-	va_end(args);
-}
-#endif
