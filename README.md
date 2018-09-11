@@ -1,6 +1,6 @@
 # lwm2m-client-rtl8710
 
-C++ implementation of lwm2m protocol for use with RTL8710 MCU based devices.
+C++ implementation of lwm2m protocol client for use with RTL8710 MCU based devices.
 
 # Compiling/Flashing
 
@@ -58,10 +58,16 @@ Password recommended at least eight characters long.
 
 # Controling device
 
-*lwm2m rest server*
+Lwm2m functionality was tested out using example lwm2m rest server located at: https://github.com/8devices/wakaama/tree/master-rest/examples/rest-server
 
-*node-red*
+Documentation on server usage and client control API is found at: https://github.com/8devices/wakaama/blob/master-rest/examples/rest-server/RESTAPI.md
+
+------------------------------------------------------------------------------------------------------------------------------
+
+For easier GUI based device control it is recommended to use Node-RED programming tool: https://nodered.org/
+
+Lwm2m protocol compatible nodes for the Node-RED programming utility can be found at: https://github.com/8devices/node-red-contrib-lesley
 
 # Debugging
 
-
+*in development*
