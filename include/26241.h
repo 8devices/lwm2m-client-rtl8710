@@ -1,9 +1,3 @@
-/*
- * 26241.h
- *
- *  Created on: Sep 7, 2018
- *      Author: tautvydas
- */
 
 #ifndef INCLUDE_26241_H_
 #define INCLUDE_26241_H_

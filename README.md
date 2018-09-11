@@ -69,3 +69,11 @@ Lwm2m protocol compatible nodes for the Node-RED programming utility can be foun
 # Debugging
 
 *in development*
+
+# License
+
+* All code is provided under The MIT License (MIT)
+
+* Application developed using Realtek provided framework, Copyright (c) Realtek
+
+* Lwm2m protocol implementation is provided under The MIT License (MIT), Copyright (c) 2016 Openhab-Nodes
