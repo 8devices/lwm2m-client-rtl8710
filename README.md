@@ -10,7 +10,7 @@ Currently the project uses a custom PlatformIO platform, developed for Linux and
 
 To compile project run:
 
-platformio run
+    platformio run
 
 This command will download all libraries, tools, frameworks and platforms necessary to build, flash and debug the project.
 
@@ -18,7 +18,7 @@ This command will download all libraries, tools, frameworks and platforms necess
 
 To upload project run:
 
-platformio run -t upload
+    platformio run -t upload
 
 Most RTL8710 based development boards include a CMSIS-DAP interface for device flashing and debugging, so proper driver installation might be needed.
 
@@ -40,21 +40,19 @@ Once powered on the device connects to an access point and server configured ins
 
 Once connected to device AP, you can view the current configuration by sending a GET request to "http://[GATEWAY_ADDR]:80/ap", ex.:
 
-curl http://192.168.4.1:80/ap
+    curl http://192.168.4.1:80/ap
 
 ------------------------------------------------------------------------------------------------------------------------------
 
 To keep current configuration send a GET request to "http://[GATEWAY_ADDR]:80/keep", ex.:
 
-curl http://192.168.4.1:80/keep
+    curl http://192.168.4.1:80/keep
 
 ------------------------------------------------------------------------------------------------------------------------------
 
 To change current configuration send POST request to "http://[GATEWAY_ADDR]:80/ap", with JSON payload, ex.:
 
-curl http://192.168.4.1:80/ap -d '{"ssid":"ap_ssid","pass":"ap_password","client_name":"example_client","server_address":"coap://192.168.0.1:5555"}' -H 'Content-type:application/json'
-
-Password recommended at least eight characters long.
+    curl http://192.168.4.1:80/ap -d '{"ssid":"ap_ssid","pass":"ap_password","client_name":"example_client","server_address":"coap://192.168.0.1:5555"}' -H 'Content-type:application/json'
 
 # Controling device
 
