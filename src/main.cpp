@@ -1,27 +1,22 @@
 
 //	WAKAAMA
-//#include "liblwm2m.h"
 #include "internal_objects.h"
 #include "internal.h"
-//#include "lwm2m/context.h"
 #include "lwm2m/c_connect.h"
 #include "lwm2m/debug.h"
 //	WAKAAMA OBJECTS
 #include "lwm2mObjects/3312.h" //relay
 #include "lwm2mObjects/3306.h" //pwm
 #include "lwm2mObjects/3202.h" //adc
-#include "12345.h"			   //custom
-//	USER
-#include "main.h"
+#include "26241.h"			   //custom
 //	GCC
 #include "stdarg.h"
 #include "stdio.h"
 #include "sys/time.h"
-//#include "stdlib.h"
 //	LWIP
-//#include "netconf.h"
 #include "lwip_netconf.h"
 //	SDK
+#include "main.h"
 extern "C" {
 #include "httpd/httpd.h"
 #include "dhcp/dhcps.h"
@@ -41,12 +36,9 @@ extern "C" {
 #include "spi_ex_api.h"
 #include "i2c_api.h"
 }
-
 //	RTOS
 //#include "FreeRTOSConfig.h"
 //#include "task.h"
-//	TEST_OBJECTS
-//#include "test_objects/pwm.h"
 
 #define SPI1_MOSI		PA_23
 #define SPI1_MISO		PA_22
@@ -60,9 +52,9 @@ extern "C" {
 #define SPI_MODE		0
 #define GPIO_LED		PA_12
 #define ADC_PIN			PA_19
-//#define SPI_MASTER_OBJ	1
+#define SPI_MASTER_OBJ	1
 //#define I2C_MASTER_OBJ	1
-#define ADC_OBJ			1
+//#define ADC_OBJ			1
 
 struct timeval tv;
 gtimer_t timer;
@@ -115,7 +107,7 @@ uint32_t gen_crc(const network_info_t *buff);
 i2c_t i2cmaster;
 void transaction_execute(Lwm2mObjectInstance* instance, lwm2m_context_t* context)
 {
-	id12345::instance* objinst = instance->as<id12345::instance>();
+	id26241::instance* objinst = instance->as<id26241::instance>();
 
 	uint8_t *buf = objinst->buffer.data;
 	int write_len = objinst->buffer.used_len;
@@ -134,7 +126,7 @@ void transaction_execute(Lwm2mObjectInstance* instance, lwm2m_context_t* context
 	objinst->length = read_len;
 }
 
-void i2c_init(id12345::object* obj, id12345::instance* inst)
+void i2c_init(id26241::object* obj, id26241::instance* inst)
 {
 	inst->frequency = I2C_BUS_CLK;
 	inst->slave_address = I2C_SLAVE_ADDR0;
@@ -142,13 +134,13 @@ void i2c_init(id12345::object* obj, id12345::instance* inst)
 	i2c_init(&i2cmaster, I2C_SDA ,I2C_SCL);
 	i2c_frequency(&i2cmaster, inst->frequency);
 	i2c_slave_address(&i2cmaster, 1, inst->slave_address, 0xFF);
-    obj->verifyWrite = [](id12345::instance* i, uint16_t res_id)
+    obj->verifyWrite = [](id26241::instance* i, uint16_t res_id)
 	{
-    	if(res_id == id12345::RESID::frequency)
+    	if(res_id == id26241::RESID::frequency)
     	{
     		i2c_frequency(&i2cmaster, i->frequency);
     	}
-    	else if(res_id == id12345::RESID::slave_address)
+    	else if(res_id == id26241::RESID::slave_address)
     	{
     		i2c_slave_address(&i2cmaster, 1, i->slave_address, 0xFF);
     	}
@@ -163,7 +155,7 @@ void i2c_init(id12345::object* obj, id12345::instance* inst)
 spi_t spi_master;
 void transaction_execute(Lwm2mObjectInstance* instance, lwm2m_context_t* context)
 {
-	id12345::instance* objinst = instance->as<id12345::instance>();
+	id26241::instance* objinst = instance->as<id26241::instance>();
 	char rx_buffer[100];
 
 	spi_master_write_read_stream(&spi_master, (char*)objinst->buffer.data, rx_buffer, objinst->buffer.used_len);
@@ -171,7 +163,7 @@ void transaction_execute(Lwm2mObjectInstance* instance, lwm2m_context_t* context
 	objinst->buffer.copy(rx_buffer, objinst->buffer.used_len);
 }
 
-void spi_init(id12345::object* obj, id12345::instance* inst)
+void spi_init(id26241::object* obj, id26241::instance* inst)
 {
 	inst->frequency = SPI_BUS_CLK;
 	inst->mode = SPI_MODE;
@@ -181,13 +173,13 @@ void spi_init(id12345::object* obj, id12345::instance* inst)
 	spi_format(&spi_master, 8, inst->mode, 0);
 	spi_frequency(&spi_master, inst->frequency);
 
-    obj->verifyWrite = [](id12345::instance* i, uint16_t res_id)
+    obj->verifyWrite = [](id26241::instance* i, uint16_t res_id)
 	{
-    	if(res_id == id12345::RESID::frequency)
+    	if(res_id == id26241::RESID::frequency)
     	{
     		spi_frequency(&spi_master, i->frequency);
     	}
-    	else if(res_id == id12345::RESID::mode)
+    	else if(res_id == id26241::RESID::mode)
     	{
     		spi_format(&spi_master, 8, i->mode, 0);
     	}
@@ -200,10 +192,14 @@ void spi_init(id12345::object* obj, id12345::instance* inst)
 }
 
 #elif ADC_OBJ
-void adc_thread(id3202::instance* inst)
+void adc_thread(void* inst)
 {
-	inst->AnalogInputCurrentValue = analogin_read(&adcin);
-	vTaskDelay(pdMS_TO_TICKS(100));
+	id3202::instance* instance = (id3202::instance*) inst;
+	while(1)
+	{
+		instance->AnalogInputCurrentValue = analogin_read(&adcin);
+		vTaskDelay(pdMS_TO_TICKS(100));
+	}
 }
 
 void adc_init(id3202::object* obj, id3202::instance* inst)
@@ -212,7 +208,7 @@ void adc_init(id3202::object* obj, id3202::instance* inst)
     inst->id = 0;
     obj->addInstance(CTX(client_context), inst);
     obj->registerObject(CTX(client_context), false);
-    xTaskCreate((TaskFunction_t)adc_thread, "ADC_THREAD", 1024/4, inst, tskIDLE_PRIORITY + 1, NULL);
+    xTaskCreate((TaskFunction_t)adc_thread, "ADC_THREAD", 1024/4, (void*)inst, tskIDLE_PRIORITY + 1, NULL);
 }
 #endif
 
@@ -226,8 +222,9 @@ void pwm_init(id3306::object* obj, id3306::instance* inst)
 	pwmout_init(&gpio_pwm, PA_0);
 	pwmout_write(&gpio_pwm, 0.5);
 	pwmout_period_ms(&gpio_pwm, 300);
-
 	gtimer_init(&timer, 1);
+
+	inst->Dimmer = 50;
 
     obj->verifyWrite = [](id3306::instance* i, uint16_t res_id)
     {
@@ -471,7 +468,7 @@ void wakaama_thread(void)
     client_context.deviceInstance.model_name = "test model";
     client_context.deviceInstance.device_type = "sensor";
     client_context.deviceInstance.firmware_ver = "1.0";
-    client_context.deviceInstance.serial_number = "140234-645235-12353";
+    client_context.deviceInstance.serial_number = "11111-11111-11111";
 #ifdef LWM2M_DEVICE_INFO_WITH_TIME
     client_context.deviceInstance.time_offset = 3;
     client_context.deviceInstance.timezone = "+03:00";
@@ -480,12 +477,12 @@ void wakaama_thread(void)
     relay_init(&relay, &relayinst);
 	pwm_init(&pwm, &pwminst);
 #if SPI_MASTER_OBJ
-	id12345::object spi{};
-	id12345::instance spiinst{};
+	id26241::object spi{};
+	id26241::instance spiinst{};
 	spi_init(&spi, &spiinst);
 #elif I2C_MASTER_OBJ
-	id12345::object i2c{};
-	id12345::instance i2cinst{};
+	id26241::object i2c{};
+	id26241::instance i2cinst{};
 	i2c_init(&i2c, &i2cinst);
 #elif ADC_OBJ
 	id3202::object adc{};
@@ -527,7 +524,7 @@ void pinmux_thread(void)
 	while(1)
 	{
 		Pinmux_Config(PA_30, PINMUX_FUNCTION_GPIO);
-		DelayUs(5); // AR REIKIA
+		DelayUs(5);
 		reg = HAL_READ32(GPIO_REG_BASE, 0x50);
 		Pinmux_Config(PA_30, PINMUX_FUNCTION_UART);
 		if(!((reg >> 30) & 1))

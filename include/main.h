@@ -16,8 +16,8 @@ void wlan_network();
 #define SERIAL_DEBUG_RX 1
 
 /* WLAN and Netork */
-#define STA_MODE_SSID	"rosettenet"    /* Set SSID here */
-#define AP_MODE_SSID		"amebazAP"    /* Set SSID here */
+#define STA_MODE_SSID	"ssid"    /* Set SSID here */
+#define AP_MODE_SSID		"ap_ssid"    /* Set SSID here */
 #define AP_DEFAULT_CH	6
 #define WLAN0_NAME		"wlan0"
 #define WLAN1_NAME      	"wlan1"
