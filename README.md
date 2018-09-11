@@ -72,14 +72,10 @@ Lwm2m protocol compatible nodes for the Node-RED programming utility can be foun
 
 ## License
 
-* All code is provided under The MIT License (MIT)
+* All code int this project is provided under The MIT License (MIT)
 
-* Application developed using Realtek provided framework
+* Project uses sdk-ameba-v4.0b framework provided by Realtek
 
-* WakaamaNode is provided under The MIT License (MIT), Copyright (c) 2016 Openhab-Nodes
+* Project uses WakaamaNode library which is under The MIT License (MIT), Copyright (c) 2016 Openhab-Nodes
 
-* Wakaama is provided under the Eclipse Public License - v2.0
-
-* MBED is provided under the Apache License, Version 2.0
-
-* FreeRTOS is provided under The MIT License (MIT)
+* WakaamaNode library in turn depends on Wakaama which is under the Eclipse Public License - v2.0
