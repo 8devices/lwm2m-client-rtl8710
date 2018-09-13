@@ -22,15 +22,46 @@ To upload project run:
 
 Most RTL8710 based development boards include a CMSIS-DAP interface for device flashing and debugging, so proper driver installation might be needed.
 
-------------------------------------------------------------------------------------------------------------------------------
-
 ## Lwm2m
 
 The application uses the lwm2m protocol, and includes examples of how to implement GPIO, PWM, ADC, I2C and SPI features using lwm2m objects.
 
-To choose between building SPI, I2C or ADC example uncomment the appropriate '#define' - 'SPI_MASTER_OBJ', 'I2C_MASTER_OBJ' or 'ADC_OBJ'. Only one of these objects must be used at the same time.
+To choose between building SPI, I2C or ADC example uncomment the appropriate '#define' - 'SPI_MASTER_OBJ', 'I2C_MASTER_OBJ' or 'ADC_OBJ'. Only one of these objects can be used at the same time.
 
-------------------------------------------------------------------------------------------------------------------------------
+### GPIO
+
+**Refer to lwm2m object id3312**
+* Write 1/0 to resource 'OnOff' to set GPIO pin PA12 to either high or low.
+
+### PWM
+
+**Object id3306**
+* Resource 'OnOff' turns PWM output on or off for pin PA_0.
+* 'Dimmer' sets the duty cycle. Can be an integer value [0-100].
+* 'OnTime' lets you specify a time in micro seconds that you want PWM to be on.
+
+### ADC
+
+**Object id3202**
+* Read resource 'AnalogInputCurrentValue' to measure voltage on pin PA19.
+
+### SPI
+
+**Object id26241 (look for header file in 'include' directory)**
+* 'Frequency' specifies the SPI clock frequency.
+* 'Mode' specifies SPI mode.
+* 'Buffer' - data to be sent to SPI slave devices. Read this resource to get last received data from slave devices.
+* 'Length' - received data length.
+* 'Transaction' - once you have specified a data buffer, execute this resource to start SPI write command. 'Buffer' resource gets overwritten by data received from slaves.
+
+### I2C
+
+**Object id26241**
+* 'Frequency' specifies the I2C clock frequency.
+* 'Slave_address' specifies I2C slave address.
+* 'Buffer' - data to be sent to I2C slave devices. After read operation this resource is overwritten with data received from slaves. If you want *read only* operation, then buffer must be empty.
+* 'Length' - if value is larger than 0 specifies number of bytes to be read, else specifies *write only* operation.
+* 'Transaction' - execute this resource to start I2C write, read or write/read operation (depends on previously defined conditions).
 
 ## Configuration
 
@@ -60,8 +91,6 @@ Lwm2m functionality was tested out using example lwm2m rest server located at: h
 
 Documentation on server usage and client control API is found at: https://github.com/8devices/wakaama/blob/master-rest/examples/rest-server/RESTAPI.md
 
-------------------------------------------------------------------------------------------------------------------------------
-
 For easier GUI based device control it is recommended to use Node-RED programming tool: https://nodered.org/
 
 Lwm2m protocol compatible nodes for the Node-RED programming utility can be found at: https://github.com/8devices/node-red-contrib-lesley
@@ -72,7 +101,7 @@ Lwm2m protocol compatible nodes for the Node-RED programming utility can be foun
 
 ## License
 
-* All code int this project is provided under The MIT License (MIT)
+* All code in this project is provided under The MIT License (MIT)
 
 * Project uses sdk-ameba-v4.0b framework provided by Realtek
 
