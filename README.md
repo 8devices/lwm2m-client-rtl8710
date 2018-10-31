@@ -22,6 +22,8 @@ To upload project run:
 
 Most RTL8710 based development boards include a CMSIS-DAP interface for device flashing and debugging, so proper driver installation might be needed.
 
+Instructions on DAP firmware installation can be found [here](https://github.com/8devices/platformio-realtek-rtl8710b#dap-firmware).
+
 ## Lwm2m
 
 The application uses the lwm2m protocol, and includes examples of how to implement GPIO, PWM, ADC, I2C and SPI features using lwm2m objects.
