@@ -1,7 +1,7 @@
 
 //	WAKAAMA
 #include "internal_objects.h"
-#include "internal.h"
+//#include "internal.h"
 #include "lwm2m/c_connect.h"
 #include "lwm2m/debug.h"
 //	WAKAAMA OBJECTS
@@ -55,6 +55,31 @@ extern "C" {
 #define SPI_MASTER_OBJ	1
 //#define I2C_MASTER_OBJ	1
 //#define ADC_OBJ			1
+
+const char *cert =
+"-----BEGIN CERTIFICATE-----\r\n"
+"MIIB/zCCAaagAwIBAgIJAKtCMSydQ6QoMAoGCCqGSM49BAMCMFsxCzAJBgNVBAYT\r\n"
+"AkFVMRMwEQYDVQQIDApTb21lLVN0YXRlMSEwHwYDVQQKDBhJbnRlcm5ldCBXaWRn\r\n"
+"aXRzIFB0eSBMdGQxFDASBgNVBAMMC3Rlc3QtY2xpZW50MB4XDTE5MDEyNDE0MzEy\r\n"
+"OFoXDTIwMDEyNDE0MzEyOFowWzELMAkGA1UEBhMCQVUxEzARBgNVBAgMClNvbWUt\r\n"
+"U3RhdGUxITAfBgNVBAoMGEludGVybmV0IFdpZGdpdHMgUHR5IEx0ZDEUMBIGA1UE\r\n"
+"AwwLdGVzdC1jbGllbnQwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAT2rd3Eig8p\r\n"
+"txtouJlAV523yWvJX9SATnAthpqqZX3JPlAdJJ2OwSifOK8MGZdlc29v8WjLMq4o\r\n"
+"YC6hTelw0DaJo1MwUTAdBgNVHQ4EFgQUIeARezzQwzu6TUxJb3OdShs0+sowHwYD\r\n"
+"VR0jBBgwFoAUIeARezzQwzu6TUxJb3OdShs0+sowDwYDVR0TAQH/BAUwAwEB/zAK\r\n"
+"BggqhkjOPQQDAgNHADBEAiA7AvexqUgg/R+wNfEuC44yHAKdslIT6q9Rv6cbs/vc\r\n"
+"kwIgctiGd8BhPjmUeIKWudGnVY1EtlreWsjOpxG4zYUqoAE=\r\n"
+"-----END CERTIFICATE-----\r\n";
+const char *pkey =
+"-----BEGIN EC PARAMETERS-----\r\n"
+"BggqhkjOPQMBBw==\r\n"
+"-----END EC PARAMETERS-----\r\n"
+"-----BEGIN EC PRIVATE KEY-----\r\n"
+"MHcCAQEEIPZIf+S+Ki4/3x9WINUmBTenN5I5B/1WU2LA94WCaSu/oAoGCCqGSM49\r\n"
+"AwEHoUQDQgAE9q3dxIoPKbcbaLiZQFedt8lryV/UgE5wLYaaqmV9yT5QHSSdjsEo\r\n"
+"nzivDBmXZXNvb/FoyzKuKGAuoU3pcNA2iQ==\r\n"
+"-----END EC PRIVATE KEY-----\r\n";
+
 
 struct timeval tv;
 gtimer_t timer;
@@ -464,6 +489,14 @@ void wakaama_thread(void)
     lwm2m_client_init(&client_context, network_info.wak_client_name);
     lwm2m_add_server(CTX(client_context), 123, network_info.wak_server, 30, false);
 
+#ifdef LWM2M_WITH_DTLS
+#ifdef LWM2M_WITH_DTLS_X509
+    lwm2m_use_dtls_x509(CTX(client_context), 123, cert, pkey, cert);
+#else
+    lwm2m_use_dtls_psk(CTX(client_context), 123, "pskid1", "psk1", strlen("psk1"));
+#endif
+#endif
+
     client_context.deviceInstance.manufacturer = "test manufacturer";
     client_context.deviceInstance.model_name = "test model";
     client_context.deviceInstance.device_type = "sensor";
@@ -495,8 +528,8 @@ void wakaama_thread(void)
 
 	while(1)
 	{
-		lwm2m_process(CTX(client_context), &tv);
-		lwm2m_watch_and_reconnect(CTX(client_context), &tv, 20);
+		lwm2m_process(CTX(client_context));
+		lwm2m_watch_and_reconnect(CTX(client_context), 20);
 		vTaskDelay(pdMS_TO_TICKS(1000));
 	}
 }
